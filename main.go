@@ -9,11 +9,13 @@ import (
 	"sync"
 )
 
+// GetOriginatedByASN get prefixes originated by a single autnum
 func GetOriginatedByASN(autnum string) (string, error) {
 	result := whois("!g"+autnum, "whois.radb.net")
 	return parse(result)
 }
 
+// GetOriginatedByASSet get prefixes originated by a as-set of autnums
 func GetOriginatedByASSet(asset string) (string, error) {
 	result := whois("!i"+asset+",1", "whois.radb.net")
 	parsedResult, _ := parse(result)
@@ -58,15 +60,15 @@ func parse(result string) (string, error) {
 				switch line[:1] {
 				case "A":
 					dataLength, _ = strconv.Atoi(line[1:])
-					break;
+					break
 				case "C":
-					break;
+					break
 				case "D":
-					break;
+					break
 				case "E":
-					break;
+					break
 				case "F":
-					break;
+					break
 				}
 			} else {
 				result = line
