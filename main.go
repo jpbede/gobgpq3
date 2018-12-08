@@ -3,54 +3,101 @@ package gobgpq3
 import (
 	"errors"
 	"fmt"
+	"github.com/ivpusic/grpool"
 	"net"
+	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
-	"sync"
 )
 
-// GetOriginatedByASN get prefixes originated by a single autnum
-func GetOriginatedByASN(autnum string) (string, error) {
-	result := whois("!g"+autnum, "whois.radb.net")
+var whoisServer = "whois.radb.net"
+
+// SetWhoisServer set's a other whois to be used instead of whois.radb.net
+func SetWhoisServer(server string) {
+	whoisServer = server
+}
+
+// GetOriginated4ByASN get ipv4 prefixes originated by a single autnum
+func GetOriginated4ByASN(autnum string) ([]string, error) {
+	if !isValidAutNum(autnum) {
+		return nil, errors.New("invalid AutNum")
+	}
+	result, err := whois("!g"+autnum, whoisServer)
+	if err != nil {
+		return nil, err
+	}
+	return parse(result)
+}
+
+// GetOriginated6ByASN get ipv6 prefixes originated by a single autnum
+func GetOriginated6ByASN(autnum string) ([]string, error) {
+	if !isValidAutNum(autnum) {
+		return nil, errors.New("invalid AutNum")
+	}
+	result, err := whois("!6"+autnum, whoisServer)
+	if err != nil {
+		return nil, err
+	}
 	return parse(result)
 }
 
 // GetOriginatedByASSet get prefixes originated by a as-set of autnums
-func GetOriginatedByASSet(asset string) (string, error) {
-	result := whois("!i"+asset+",1", "whois.radb.net")
-	parsedResult, _ := parse(result)
-	autnums := strings.Split(parsedResult, " ")
+func GetOriginatedByASSet(asset string) ([]string, error) {
+	result, err := whois("!i"+asset+",1", whoisServer)
+	if err != nil {
+		return nil, err
+	}
+	autnums, _ := parse(result)
 
-	var wg sync.WaitGroup
+	numCPUs := runtime.NumCPU()
+	runtime.GOMAXPROCS(numCPUs)
+
+	pool := grpool.NewPool(len(autnums)/2, len(autnums))
+	defer pool.Release()
+
+	pool.WaitCount(len(autnums))
+
 	var allPrefixes []string
 
-	wg.Add(len(autnums))
+	for _, asn := range autnums {
 
-	for _, autnum := range autnums {
-		go func(autnum string) {
-			prefixes, _ := GetOriginatedByASN(autnum)
+		autnum := asn // reassign for grpool
 
-			if prefixes != "" {
-				extPrefixes := strings.Split(prefixes, " ")
+		pool.JobQueue <- func() {
+			defer pool.JobDone()
 
-				for _, prefix := range extPrefixes {
+			prefixes4, _ := GetOriginated4ByASN(autnum)
+			prefixes6, _ := GetOriginated6ByASN(autnum)
+
+			var mergedPrefixes []string
+
+			if len(prefixes4) > 0 || len(prefixes6) > 0 {
+				mergedPrefixes = append(mergedPrefixes, prefixes4...)
+				mergedPrefixes = append(mergedPrefixes, prefixes6...)
+
+				for _, prefix := range mergedPrefixes {
 					allPrefixes = append(allPrefixes, strings.TrimSpace(prefix))
 				}
 			}
-
-			wg.Done()
-		}(autnum)
+		}
 	}
 
-	wg.Wait()
+	pool.WaitAll()
 
-	return strings.Join(removeDuplicates(allPrefixes), " "), nil
+	return removeDuplicates(allPrefixes), nil
 }
 
-func parse(result string) (string, error) {
+func isValidAutNum(autnum string) bool {
+	var validAutNum = regexp.MustCompile("^AS.")
+	return validAutNum.MatchString(autnum)
+}
+
+func parse(result string) ([]string, error) {
 	lines := strings.Split(result, "\n")
 
 	var dataLength int
+	var parsedResult []string
 
 	for index, line := range lines {
 
@@ -78,17 +125,19 @@ func parse(result string) (string, error) {
 	}
 
 	if len(result) > dataLength {
-		return "", errors.New("invalid data length")
+		return parsedResult, errors.New("invalid data length")
 	}
 
-	return result, nil
+	parsedResult = strings.Split(result, " ")
+	return parsedResult, nil
 }
 
-func whois(query, server string) string {
+func whois(query, server string) (string, error) {
 	conn, err := net.Dial("tcp", server+":43")
 
 	if err != nil {
-		fmt.Println("Error")
+		fmt.Println(fmt.Printf("Error: %s", err.Error()))
+		return "", err
 	}
 
 	defer conn.Close()
@@ -108,7 +157,7 @@ func whois(query, server string) string {
 		}
 	}
 
-	return string(result)
+	return string(result), nil
 }
 
 func removeDuplicates(elements []string) []string {

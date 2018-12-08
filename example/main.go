@@ -6,7 +6,8 @@ import (
 )
 
 func main() {
-	origins, _ := gobgpq3.GetOriginatedByASSet("AS-JPBE")
+	origins, err := gobgpq3.GetOriginatedByASSet("AS-JPBE")
 
 	spew.Dump(origins)
+	spew.Dump(err)
 }
