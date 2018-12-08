@@ -12,6 +12,7 @@ import (
 )
 
 var whoisServer = "whois.radb.net"
+var workerCount = 1000
 
 // SetWhoisServer set's a other whois to be used instead of whois.radb.net
 func SetWhoisServer(server string) {
@@ -53,7 +54,7 @@ func GetOriginatedByASSet(asset string) ([]string, error) {
 	numCPUs := runtime.NumCPU()
 	runtime.GOMAXPROCS(numCPUs)
 
-	pool := grpool.NewPool(len(autnums)/2, len(autnums))
+	pool := grpool.NewPool(workerCount, len(autnums))
 	defer pool.Release()
 
 	pool.WaitCount(len(autnums))
