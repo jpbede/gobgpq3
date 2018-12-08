@@ -2,7 +2,6 @@ package gobgpq3
 
 import (
 	"errors"
-	"fmt"
 	"github.com/ivpusic/grpool"
 	"net"
 	"regexp"
@@ -137,7 +136,6 @@ func whois(query, server string) (string, error) {
 	conn, err := net.Dial("tcp", server+":43")
 
 	if err != nil {
-		fmt.Println(fmt.Printf("Error: %s", err.Error()))
 		return "", err
 	}
 
