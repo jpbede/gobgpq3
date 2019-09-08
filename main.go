@@ -42,11 +42,16 @@ func GetOriginated6ByASN(autnum string) ([]string, error) {
 	return parse(result)
 }
 
+type Prefixes struct {
+	PrefixesV4 []string
+	PrefixesV6 []string
+}
+
 // GetOriginatedByASSet get prefixes originated by a as-set of autnums
-func GetOriginatedByASSet(asset string) ([]string, error) {
+func GetOriginatedByASSet(asset string) (Prefixes, error) {
 	result, err := whois("!i"+asset+",1", whoisServer)
 	if err != nil {
-		return nil, err
+		return Prefixes{}, err
 	}
 	autnums, _ := parse(result)
 
@@ -58,7 +63,7 @@ func GetOriginatedByASSet(asset string) ([]string, error) {
 
 	pool.WaitCount(len(autnums))
 
-	var allPrefixes []string
+	allPrefixes := Prefixes{}
 
 	for _, asn := range autnums {
 
@@ -70,22 +75,16 @@ func GetOriginatedByASSet(asset string) ([]string, error) {
 			prefixes4, _ := GetOriginated4ByASN(autnum)
 			prefixes6, _ := GetOriginated6ByASN(autnum)
 
-			var mergedPrefixes []string
-
 			if len(prefixes4) > 0 || len(prefixes6) > 0 {
-				mergedPrefixes = append(mergedPrefixes, prefixes4...)
-				mergedPrefixes = append(mergedPrefixes, prefixes6...)
-
-				for _, prefix := range mergedPrefixes {
-					allPrefixes = append(allPrefixes, strings.TrimSpace(prefix))
-				}
+				allPrefixes.PrefixesV4 = removeDuplicates(append(allPrefixes.PrefixesV4, prefixes4...))
+				allPrefixes.PrefixesV6 = removeDuplicates(append(allPrefixes.PrefixesV6, prefixes6...))
 			}
 		}
 	}
 
 	pool.WaitAll()
 
-	return removeDuplicates(allPrefixes), nil
+	return allPrefixes, nil
 }
 
 func isValidAutNum(autnum string) bool {
